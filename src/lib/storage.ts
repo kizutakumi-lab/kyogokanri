@@ -1,152 +1,123 @@
 import { IP, Project, AuditLog } from '@/types';
 import { supabase, isSupabaseConfigured } from './supabase';
 
+function generateUUID(): string {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+  // Fallback UUID v4 generator
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 const INITIAL_IPS: IP[] = [
-  { id: 'ip-1', name: '秘密結社鷹の爪', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ip-2', name: '吉田勝子', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ip-3', name: '貝社員', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ip-4', name: 'そろ谷のアニメっち', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ip-5', name: '耐え子の日常', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ip-6', name: 'パンパカパンツ', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ip-7', name: '昼メシの流儀', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ip-8', name: '小３アシベ', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ip-9', name: 'きらにこ', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ip-10', name: 'その他', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '11111111-1111-4111-8111-111111111111', name: '秘密結社鷹の爪', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '22222222-2222-4222-8222-222222222222', name: '吉田勝子', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '33333333-3333-4333-8333-333333333333', name: '貝社員', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '44444444-4444-4444-8444-444444444444', name: 'そろ谷のアニメっち', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '55555555-5555-4555-8555-555555555555', name: '耐え子の日常', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '66666666-6666-4666-8666-666666666666', name: 'パンパカパンツ', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '77777777-7777-4777-8777-777777777777', name: '昼メシの流儀', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '88888888-8888-4888-8888-888888888888', name: '小３アシベ', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '99999999-9999-4999-8999-999999999999', name: 'きらにこ', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'その他', active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
 const INITIAL_PROJECTS: Project[] = [
   {
-    id: 'proj-1',
+    id: 'a1111111-1111-4111-8111-111111111111',
     client_name: 'サッポロビール',
     agency_name: '電通',
     campaign_name: '鷹の爪×黒ラベル 夏のタイアップCM',
     exclusion_scope: 'ビール・発泡酒',
     exclusion_start_date: '2026-05-01',
-    exclusion_end_date: '2026-09-15', // 終了間近 (残り26日)
+    exclusion_end_date: '2026-09-15',
     status: '公開中',
     amount: 15000000,
     notes: 'TVCMおよびWeb広告での限定アニメ演出。日本国内限定。',
     created_at: '2026-04-10T10:00:00.000Z',
     updated_at: '2026-04-10T10:00:00.000Z',
     deleted_at: null,
-    ip_ids: ['ip-1'], // 秘密結社鷹の爪
+    ip_ids: ['11111111-1111-4111-8111-111111111111'],
   },
   {
-    id: 'proj-2',
+    id: 'b2222222-2222-4222-8222-222222222222',
     client_name: 'トヨタ自動車',
     agency_name: '博報堂',
     campaign_name: 'そろ谷のアニメっち×SUV 新車発表コラボ',
     exclusion_scope: '自動車メーカー・乗用車',
     exclusion_start_date: '2026-03-01',
-    exclusion_end_date: '2026-12-31', // 排除中
+    exclusion_end_date: '2026-12-31',
     status: '公開中',
     amount: 28000000,
     notes: 'YouTubeタイアップアニメ動画3本制作＋店舗ポップ展開。',
     created_at: '2026-02-15T09:00:00.000Z',
     updated_at: '2026-02-15T09:00:00.000Z',
     deleted_at: null,
-    ip_ids: ['ip-4'], // そろ谷のアニメっち
+    ip_ids: ['44444444-4444-4444-8444-444444444444'],
   },
   {
-    id: 'proj-3',
+    id: 'c3333333-3333-4333-8333-333333333333',
     client_name: 'NTTドコモ',
     agency_name: 'ADK',
     campaign_name: '貝社員＆耐え子 5G新料金プラン比較キャンペーン',
     exclusion_scope: '携帯通信キャリア・通信インフラ',
     exclusion_start_date: '2026-06-01',
-    exclusion_end_date: '2026-11-30', // 排除中
+    exclusion_end_date: '2026-11-30',
     status: '公開中',
     amount: 35000000,
     notes: '貝社員と耐え子のコラボSNSマンガ＋店頭ノベルティグッズ配布。',
     created_at: '2026-05-20T11:00:00.000Z',
     updated_at: '2026-05-20T11:00:00.000Z',
     deleted_at: null,
-    ip_ids: ['ip-3', 'ip-5'], // 貝社員, 耐え子の日常
+    ip_ids: ['33333333-3333-4333-8333-333333333333', '55555555-5555-4555-8555-555555555555'],
   },
   {
-    id: 'proj-4',
+    id: 'd4444444-4444-4444-8444-444444444444',
     client_name: 'セブン-イレブン',
     agency_name: '東急エージェンシー',
     campaign_name: '吉田勝子 お惣菜大感謝フェア',
     exclusion_scope: 'コンビニエンスストア',
     exclusion_start_date: '2026-08-01',
-    exclusion_end_date: '2026-09-05', // 終了間近 (残り16日)
+    exclusion_end_date: '2026-09-05',
     status: '公開中',
     amount: 12000000,
     notes: '勝子コラボ弁当・クリアファイルプレゼント企画。',
     created_at: '2026-07-01T14:30:00.000Z',
     updated_at: '2026-07-01T14:30:00.000Z',
     deleted_at: null,
-    ip_ids: ['ip-2'], // 吉田勝子
+    ip_ids: ['22222222-2222-4222-8222-222222222222'],
   },
   {
-    id: 'proj-5',
+    id: 'e5555555-5555-4555-8555-555555555555',
     client_name: 'ローソン',
     agency_name: '電通',
     campaign_name: 'パンパカパンツ 秋のウチカフェスイーツタイアップ',
     exclusion_scope: 'コンビニエンスストア',
     exclusion_start_date: '2026-10-01',
-    exclusion_end_date: '2027-01-31', // 開始予定
+    exclusion_end_date: '2027-01-31',
     status: '受注／制作中',
     amount: 18000000,
     notes: 'タイアップスイーツ2種全国発売。オリジナルステッカー封入。',
     created_at: '2026-08-10T16:00:00.000Z',
     updated_at: '2026-08-10T16:00:00.000Z',
     deleted_at: null,
-    ip_ids: ['ip-6'], // パンパカパンツ
-  },
-  {
-    id: 'proj-6',
-    client_name: '日清食品',
-    agency_name: 'ジェイアール東日本企画',
-    campaign_name: '昼メシの流儀 コラボカップ麺開発＆プロモーション',
-    exclusion_scope: '即席麺・カップ麺・インスタント食品',
-    exclusion_start_date: '2025-10-01',
-    exclusion_end_date: '2026-03-31', // 終了済み
-    status: '契約終了',
-    amount: 22000000,
-    notes: 'パッケージコラボ＋オリジナル短編マンガ制作。',
-    created_at: '2025-09-01T10:00:00.000Z',
-    updated_at: '2026-04-01T09:00:00.000Z',
-    deleted_at: null,
-    ip_ids: ['ip-7'], // 昼メシの流儀
-  },
-  {
-    id: 'proj-7',
-    client_name: 'アサヒ飲料',
-    agency_name: '大広',
-    campaign_name: '小３アシベ＆きらにこ 熱中症対策ドリンクプロモーション',
-    exclusion_scope: '清涼飲料水・スポーツドリンク',
-    exclusion_start_date: '2026-07-01',
-    exclusion_end_date: '2026-08-28', // 終了間近 (残り8日)
-    status: '公開中',
-    amount: 9500000,
-    notes: '小学生向け熱中症予防啓発ポスターおよびWebアニメ。',
-    created_at: '2026-06-15T08:00:00.000Z',
-    updated_at: '2026-06-15T08:00:00.000Z',
-    deleted_at: null,
-    ip_ids: ['ip-8', 'ip-9'], // 小３アシベ, きらにこ
+    ip_ids: ['66666666-6666-4666-8666-666666666666'],
   },
 ];
 
 const INITIAL_LOGS: AuditLog[] = [
   {
-    id: 'log-1',
-    project_id: 'proj-5',
+    id: 'f6666666-6666-4666-8666-666666666666',
+    project_id: 'e5555555-5555-4555-8555-555555555555',
     action: 'CREATE',
     user_name: '営業部 田中',
     user_email: 'tanaka@example.com',
     details: '新規案件「パンパカパンツ 秋のウチカフェスイーツタイアップ」を登録しました。',
     created_at: '2026-08-10T16:00:00.000Z',
-  },
-  {
-    id: 'log-2',
-    project_id: 'proj-4',
-    action: 'UPDATE',
-    user_name: '営業部 佐々木',
-    user_email: 'sasaki@example.com',
-    details: '案件「吉田勝子 お惣菜大感謝フェア」の金額を 12,000,000円 に更新しました。',
-    created_at: '2026-07-01T14:30:00.000Z',
   },
 ];
 
@@ -165,7 +136,6 @@ const STORAGE_KEYS = {
   LOGS: 'conflict_management_logs',
 };
 
-// ヘルパー関数: LocalStorageアクセス
 function getLocal<T>(key: string, defaultVal: T): T {
   if (typeof window === 'undefined') return defaultVal;
   try {
@@ -186,15 +156,19 @@ function setLocal<T>(key: string, val: T): void {
   }
 }
 
-/**
- * データ取得 / 保存サービスクラス
- */
 export const DataService = {
   // IP一覧の取得
   async getIPs(): Promise<IP[]> {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from(TABLES.IPS).select('*').order('created_at', { ascending: true });
-      if (!error && data && data.length > 0) return data as IP[];
+      try {
+        const { data, error } = await supabase.from(TABLES.IPS).select('*').order('created_at', { ascending: true });
+        if (!error && data && data.length > 0) {
+          setLocal(STORAGE_KEYS.IPS, data);
+          return data as IP[];
+        }
+      } catch (e) {
+        console.warn('Supabase getIPs fallback to local storage:', e);
+      }
     }
     return getLocal<IP[]>(STORAGE_KEYS.IPS, INITIAL_IPS);
   },
@@ -211,10 +185,11 @@ export const DataService = {
         ...ipData,
         updated_at: new Date().toISOString(),
       };
-      ips[index] = updatedIp;
+      if (index >= 0) ips[index] = updatedIp;
+      else ips.unshift(updatedIp);
     } else {
       updatedIp = {
-        id: `ip-${Date.now()}`,
+        id: generateUUID(),
         name: ipData.name,
         active: ipData.active ?? true,
         created_at: new Date().toISOString(),
@@ -226,41 +201,64 @@ export const DataService = {
     setLocal(STORAGE_KEYS.IPS, ips);
 
     if (isSupabaseConfigured && supabase) {
-      await supabase.from(TABLES.IPS).upsert([updatedIp]);
+      try {
+        await supabase.from(TABLES.IPS).upsert([updatedIp]);
+      } catch (e) {
+        console.error('Supabase saveIP error:', e);
+      }
     }
 
     return updatedIp;
   },
 
-  // IPの削除・無効化
+  // IPの無効化
   async deleteIP(id: string): Promise<void> {
     const ips = await this.getIPs();
     const updated = ips.map((ip) => (ip.id === id ? { ...ip, active: false } : ip));
     setLocal(STORAGE_KEYS.IPS, updated);
 
     if (isSupabaseConfigured && supabase) {
-      await supabase.from(TABLES.IPS).update({ active: false }).eq('id', id);
+      try {
+        await supabase.from(TABLES.IPS).update({ active: false }).eq('id', id);
+      } catch (e) {
+        console.error('Supabase deleteIP error:', e);
+      }
     }
   },
 
   // 案件一覧の取得
   async getProjects(): Promise<Project[]> {
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from(TABLES.PROJECTS)
-        .select(`*, ${TABLES.PROJECT_IPS}(ip_id)`)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
+    const localProjs = getLocal<Project[]>(STORAGE_KEYS.PROJECTS, INITIAL_PROJECTS).filter((p) => !p.deleted_at);
 
-      if (!error && data) {
-        return data.map((item: any) => ({
-          ...item,
-          ip_ids: item[TABLES.PROJECT_IPS] ? item[TABLES.PROJECT_IPS].map((pi: any) => pi.ip_id) : [],
-        }));
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from(TABLES.PROJECTS)
+          .select(`*, ${TABLES.PROJECT_IPS}(ip_id)`)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          const supabaseProjects: Project[] = data.map((item: any) => ({
+            ...item,
+            ip_ids: item[TABLES.PROJECT_IPS] ? item[TABLES.PROJECT_IPS].map((pi: any) => pi.ip_id) : [],
+          }));
+
+          // Supabaseのデータとローカルデータを重複なしでマージ
+          const mergedMap = new Map<string, Project>();
+          localProjs.forEach((p) => mergedMap.set(p.id, p));
+          supabaseProjects.forEach((p) => mergedMap.set(p.id, p));
+
+          const mergedList = Array.from(mergedMap.values()).filter((p) => !p.deleted_at);
+          setLocal(STORAGE_KEYS.PROJECTS, mergedList);
+          return mergedList;
+        }
+      } catch (e) {
+        console.warn('Supabase getProjects error, using local data:', e);
       }
     }
-    const localProjs = getLocal<Project[]>(STORAGE_KEYS.PROJECTS, INITIAL_PROJECTS);
-    return localProjs.filter((p) => !p.deleted_at);
+
+    return localProjs;
   },
 
   // 案件の保存 (新規/更新)
@@ -277,7 +275,7 @@ export const DataService = {
     if (isNew) {
       project = {
         ...projectData,
-        id: `proj-${Date.now()}`,
+        id: generateUUID(),
         created_at: now,
         updated_at: now,
         deleted_at: null,
@@ -290,9 +288,11 @@ export const DataService = {
         ...projectData,
         updated_at: now,
       };
-      projects[index] = project;
+      if (index >= 0) projects[index] = project;
+      else projects.unshift(project);
     }
 
+    // 必ず画面に表示されるよう、ローカルストレージへ即保存
     setLocal(STORAGE_KEYS.PROJECTS, projects);
 
     // ログ記録
@@ -304,14 +304,26 @@ export const DataService = {
       details: `${isNew ? '新規案件' : '案件修正'}: 「${project.campaign_name}」（${project.client_name}様）`,
     });
 
+    // Supabaseに同期
     if (isSupabaseConfigured && supabase) {
-      const { ip_ids, ...projObj } = project;
-      await supabase.from(TABLES.PROJECTS).upsert([projObj]);
-      // 中間テーブル更新
-      await supabase.from(TABLES.PROJECT_IPS).delete().eq('project_id', project.id);
-      if (ip_ids.length > 0) {
-        const relations = ip_ids.map((ip_id) => ({ project_id: project.id, ip_id }));
-        await supabase.from(TABLES.PROJECT_IPS).insert(relations);
+      try {
+        const { ip_ids, ...projObj } = project;
+        const { error: projError } = await supabase.from(TABLES.PROJECTS).upsert([projObj]);
+        if (projError) {
+          console.error('Supabase project upsert error:', projError);
+        }
+
+        // 中間テーブル更新
+        await supabase.from(TABLES.PROJECT_IPS).delete().eq('project_id', project.id);
+        if (ip_ids && ip_ids.length > 0) {
+          const relations = ip_ids.map((ip_id) => ({ project_id: project.id, ip_id }));
+          const { error: relError } = await supabase.from(TABLES.PROJECT_IPS).insert(relations);
+          if (relError) {
+            console.error('Supabase project_ips insert error:', relError);
+          }
+        }
+      } catch (e) {
+        console.error('Supabase saveProject sync error:', e);
       }
     }
 
@@ -354,15 +366,23 @@ export const DataService = {
     }
 
     if (isSupabaseConfigured && supabase) {
-      await supabase.from(TABLES.PROJECTS).update({ deleted_at: now }).eq('id', id);
+      try {
+        await supabase.from(TABLES.PROJECTS).update({ deleted_at: now }).eq('id', id);
+      } catch (e) {
+        console.error('Supabase deleteProject error:', e);
+      }
     }
   },
 
   // ログ一覧の取得
   async getAuditLogs(): Promise<AuditLog[]> {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from(TABLES.AUDIT_LOGS).select('*').order('created_at', { ascending: false });
-      if (!error && data) return data as AuditLog[];
+      try {
+        const { data, error } = await supabase.from(TABLES.AUDIT_LOGS).select('*').order('created_at', { ascending: false });
+        if (!error && data) return data as AuditLog[];
+      } catch (e) {
+        console.warn('Supabase getAuditLogs error:', e);
+      }
     }
     return getLocal<AuditLog[]>(STORAGE_KEYS.LOGS, INITIAL_LOGS);
   },
@@ -372,14 +392,18 @@ export const DataService = {
     const logs = getLocal<AuditLog[]>(STORAGE_KEYS.LOGS, INITIAL_LOGS);
     const newLog: AuditLog = {
       ...log,
-      id: `log-${Date.now()}`,
+      id: generateUUID(),
       created_at: new Date().toISOString(),
     };
     logs.unshift(newLog);
     setLocal(STORAGE_KEYS.LOGS, logs);
 
     if (isSupabaseConfigured && supabase) {
-      await supabase.from(TABLES.AUDIT_LOGS).insert([newLog]);
+      try {
+        await supabase.from(TABLES.AUDIT_LOGS).insert([newLog]);
+      } catch (e) {
+        console.error('Supabase addAuditLog error:', e);
+      }
     }
 
     return newLog;
