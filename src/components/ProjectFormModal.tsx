@@ -60,6 +60,8 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [rawAmountInput, setRawAmountInput] = useState('0');
 
+  const isEditing = Boolean(project?.id);
+
   useEffect(() => {
     if (project) {
       setFormData({
@@ -71,10 +73,10 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
         exclusion_start_date: project.exclusion_start_date,
         exclusion_end_date: project.exclusion_end_date,
         status: project.status,
-        amount: project.amount,
+        amount: Number(project.amount ?? 0),
         notes: project.notes || '',
       });
-      setRawAmountInput(project.amount.toString());
+      setRawAmountInput((project.amount ?? 0).toString());
     } else {
       setFormData({
         ...INITIAL_FORM,
@@ -153,7 +155,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
           <div>
             <h2 className="text-lg font-bold flex items-center gap-2">
               <Layers className="w-5 h-5 text-amber-400" />
-              {project ? '案件情報の編集' : '新規案件の登録'}
+              {isEditing ? '案件情報の編集' : '新規案件の登録'}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
               競合排除情報・期間・ステータスを正確に入力してください。
@@ -392,7 +394,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
               disabled={isSaving}
               className="px-6 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 text-sm font-black rounded-lg shadow-md transition-all disabled:opacity-50"
             >
-              {isSaving ? '保存中...' : project ? '更新を保存する' : '案件を新規登録する'}
+              {isSaving ? '保存中...' : isEditing ? '更新を保存する' : '案件を新規登録する'}
             </button>
           </div>
         </form>

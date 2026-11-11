@@ -49,6 +49,34 @@ const TABLES = {
   AUDIT_LOGS: `${TABLE_PREFIX}audit_logs`,
 };
 
+function toProjectDbPayload(project: Project) {
+  return {
+    id: project.id,
+    client_name: project.client_name,
+    agency_name: project.agency_name || '',
+    campaign_name: project.campaign_name,
+    exclusion_scope: project.exclusion_scope,
+    exclusion_start_date: project.exclusion_start_date,
+    exclusion_end_date: project.exclusion_end_date,
+    status: project.status,
+    amount: Number(project.amount ?? 0),
+    notes: project.notes || '',
+    created_at: project.created_at,
+    updated_at: project.updated_at,
+    deleted_at: project.deleted_at ?? null,
+  };
+}
+
+function toIpDbPayload(ip: IP) {
+  return {
+    id: ip.id,
+    name: ip.name,
+    active: ip.active,
+    created_at: ip.created_at,
+    updated_at: ip.updated_at,
+  };
+}
+
 const STORAGE_KEYS = {
   IPS: 'conflict_management_ips',
   PROJECTS: 'conflict_management_projects',
@@ -95,14 +123,18 @@ export const DataService = {
   // IPの保存/更新
   async saveIP(ipData: Partial<IP> & { name: string }): Promise<IP> {
     const ips = await this.getIPs();
+    const now = new Date().toISOString();
     let updatedIp: IP;
 
     if (ipData.id) {
       const index = ips.findIndex((i) => i.id === ipData.id);
+      const existing = index >= 0 ? ips[index] : undefined;
       updatedIp = {
-        ...ips[index],
-        ...ipData,
-        updated_at: new Date().toISOString(),
+        id: ipData.id,
+        name: ipData.name,
+        active: ipData.active ?? existing?.active ?? true,
+        created_at: existing?.created_at || now,
+        updated_at: now,
       };
       if (index >= 0) ips[index] = updatedIp;
       else ips.unshift(updatedIp);
@@ -111,44 +143,42 @@ export const DataService = {
         id: generateUUID(),
         name: ipData.name,
         active: ipData.active ?? true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: now,
+        updated_at: now,
       };
       ips.push(updatedIp);
     }
 
-    setLocal(STORAGE_KEYS.IPS, ips);
-
     if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from(TABLES.IPS).upsert([updatedIp]);
-      } catch (e) {
-        console.error('Supabase saveIP error:', e);
+      const { error } = await supabase.from(TABLES.IPS).upsert([toIpDbPayload(updatedIp)]);
+      if (error) {
+        console.error('Supabase saveIP error:', error);
+        throw error;
       }
     }
 
+    setLocal(STORAGE_KEYS.IPS, ips);
     return updatedIp;
   },
 
   // IPの無効化
   async deleteIP(id: string): Promise<void> {
     const ips = await this.getIPs();
-    const updated = ips.map((ip) => (ip.id === id ? { ...ip, active: false } : ip));
-    setLocal(STORAGE_KEYS.IPS, updated);
+    const updated = ips.map((ip) => (ip.id === id ? { ...ip, active: false, updated_at: new Date().toISOString() } : ip));
 
     if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from(TABLES.IPS).update({ active: false }).eq('id', id);
-      } catch (e) {
-        console.error('Supabase deleteIP error:', e);
+      const { error } = await supabase.from(TABLES.IPS).update({ active: false }).eq('id', id);
+      if (error) {
+        console.error('Supabase deleteIP error:', error);
+        throw error;
       }
     }
+
+    setLocal(STORAGE_KEYS.IPS, updated);
   },
 
   // 案件一覧の取得
   async getProjects(): Promise<Project[]> {
-    const localProjs = getLocal<Project[]>(STORAGE_KEYS.PROJECTS, INITIAL_PROJECTS).filter((p) => !p.deleted_at);
-
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase
@@ -158,26 +188,27 @@ export const DataService = {
           .order('created_at', { ascending: false });
 
         if (!error && data) {
-          const supabaseProjects: Project[] = data.map((item: any) => ({
-            ...item,
-            ip_ids: item[TABLES.PROJECT_IPS] ? item[TABLES.PROJECT_IPS].map((pi: any) => pi.ip_id) : [],
-          }));
+          const supabaseProjects: Project[] = data.map((item: any) => {
+            const { [TABLES.PROJECT_IPS]: projectIps, ...rest } = item;
+            return {
+              ...rest,
+              amount: Number(rest.amount ?? 0),
+              ip_ids: Array.isArray(projectIps) ? projectIps.map((pi: any) => pi.ip_id) : [],
+            };
+          });
 
-          // Supabaseのデータとローカルデータを重複なしでマージ
-          const mergedMap = new Map<string, Project>();
-          localProjs.forEach((p) => mergedMap.set(p.id, p));
-          supabaseProjects.forEach((p) => mergedMap.set(p.id, p));
-
-          const mergedList = Array.from(mergedMap.values()).filter((p) => !p.deleted_at);
-          setLocal(STORAGE_KEYS.PROJECTS, mergedList);
-          return mergedList;
+          setLocal(STORAGE_KEYS.PROJECTS, supabaseProjects);
+          return supabaseProjects;
+        }
+        if (error) {
+          console.warn('Supabase getProjects error, using local data:', error);
         }
       } catch (e) {
         console.warn('Supabase getProjects error, using local data:', e);
       }
     }
 
-    return localProjs;
+    return getLocal<Project[]>(STORAGE_KEYS.PROJECTS, INITIAL_PROJECTS).filter((p) => !p.deleted_at);
   },
 
   // 案件の保存 (新規/更新)
@@ -189,32 +220,91 @@ export const DataService = {
     const isNew = !projectData.id;
     const now = new Date().toISOString();
 
-    let project: Project;
+    const index = !isNew ? projects.findIndex((p) => p.id === projectData.id) : -1;
+    const existing = index >= 0 ? projects[index] : undefined;
+
+    const project: Project = {
+      id: isNew ? generateUUID() : projectData.id!,
+      client_name: projectData.client_name,
+      agency_name: projectData.agency_name || '',
+      campaign_name: projectData.campaign_name,
+      exclusion_scope: projectData.exclusion_scope,
+      exclusion_start_date: projectData.exclusion_start_date,
+      exclusion_end_date: projectData.exclusion_end_date,
+      status: projectData.status,
+      amount: Number(projectData.amount ?? 0),
+      notes: projectData.notes || '',
+      created_at: existing?.created_at || now,
+      updated_at: now,
+      deleted_at: existing?.deleted_at ?? null,
+      ip_ids: Array.isArray(projectData.ip_ids) ? projectData.ip_ids : [],
+    };
 
     if (isNew) {
-      project = {
-        ...projectData,
-        id: generateUUID(),
-        created_at: now,
-        updated_at: now,
-        deleted_at: null,
-      };
       projects.unshift(project);
+    } else if (index >= 0) {
+      projects[index] = project;
     } else {
-      const index = projects.findIndex((p) => p.id === projectData.id);
-      project = {
-        ...projects[index],
-        ...projectData,
-        updated_at: now,
-      };
-      if (index >= 0) projects[index] = project;
-      else projects.unshift(project);
+      projects.unshift(project);
     }
 
-    // 必ず画面に表示されるよう、ローカルストレージへ即保存
+    // Supabaseに同期
+    if (isSupabaseConfigured && supabase) {
+      const dbPayload = toProjectDbPayload(project);
+
+      if (isNew) {
+        const { error: projError } = await supabase.from(TABLES.PROJECTS).insert([dbPayload]);
+        if (projError) {
+          console.error('Supabase project insert error:', projError);
+          throw projError;
+        }
+      } else {
+        const { id: _, created_at: __, ...updateFields } = dbPayload;
+        const { data: updatedRows, error: projError } = await supabase
+          .from(TABLES.PROJECTS)
+          .update(updateFields)
+          .eq('id', project.id)
+          .select('id');
+
+        if (projError) {
+          console.error('Supabase project update error:', projError);
+          throw projError;
+        }
+
+        // 万一DB側にレコードが存在しなかった場合はupsertで補完
+        if (!updatedRows || updatedRows.length === 0) {
+          const { error: upsertError } = await supabase.from(TABLES.PROJECTS).upsert([dbPayload]);
+          if (upsertError) {
+            console.error('Supabase project upsert fallback error:', upsertError);
+            throw upsertError;
+          }
+        }
+      }
+
+      // 中間テーブル更新
+      const { error: delRelError } = await supabase
+        .from(TABLES.PROJECT_IPS)
+        .delete()
+        .eq('project_id', project.id);
+      if (delRelError) {
+        console.error('Supabase project_ips delete error:', delRelError);
+        throw delRelError;
+      }
+
+      if (project.ip_ids.length > 0) {
+        const relations = project.ip_ids.map((ip_id) => ({ project_id: project.id, ip_id }));
+        const { error: relError } = await supabase.from(TABLES.PROJECT_IPS).insert(relations);
+        if (relError) {
+          console.error('Supabase project_ips insert error:', relError);
+          throw relError;
+        }
+      }
+    }
+
+    // ローカルストレージへ保存
     setLocal(STORAGE_KEYS.PROJECTS, projects);
 
-    // ログ記録
+    // ログ記録（案件保存後に実行して外部キー制約違反を防ぐ）
     await this.addAuditLog({
       project_id: project.id,
       action: isNew ? 'CREATE' : 'UPDATE',
@@ -222,29 +312,6 @@ export const DataService = {
       user_email: `${userName.toLowerCase()}@company.com`,
       details: `${isNew ? '新規案件' : '案件修正'}: 「${project.campaign_name}」（${project.client_name}様）`,
     });
-
-    // Supabaseに同期
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { ip_ids, ...projObj } = project;
-        const { error: projError } = await supabase.from(TABLES.PROJECTS).upsert([projObj]);
-        if (projError) {
-          console.error('Supabase project upsert error:', projError);
-        }
-
-        // 中間テーブル更新
-        await supabase.from(TABLES.PROJECT_IPS).delete().eq('project_id', project.id);
-        if (ip_ids && ip_ids.length > 0) {
-          const relations = ip_ids.map((ip_id) => ({ project_id: project.id, ip_id }));
-          const { error: relError } = await supabase.from(TABLES.PROJECT_IPS).insert(relations);
-          if (relError) {
-            console.error('Supabase project_ips insert error:', relError);
-          }
-        }
-      } catch (e) {
-        console.error('Supabase saveProject sync error:', e);
-      }
-    }
 
     return project;
   },
@@ -271,6 +338,14 @@ export const DataService = {
     const target = projects.find((p) => p.id === id);
     const now = new Date().toISOString();
 
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.from(TABLES.PROJECTS).update({ deleted_at: now }).eq('id', id);
+      if (error) {
+        console.error('Supabase deleteProject error:', error);
+        throw error;
+      }
+    }
+
     const updated = projects.map((p) => (p.id === id ? { ...p, deleted_at: now } : p));
     setLocal(STORAGE_KEYS.PROJECTS, updated);
 
@@ -282,14 +357,6 @@ export const DataService = {
         user_email: `${userName.toLowerCase()}@company.com`,
         details: `案件「${target.campaign_name}」（${target.client_name}様）を削除しました。`,
       });
-    }
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from(TABLES.PROJECTS).update({ deleted_at: now }).eq('id', id);
-      } catch (e) {
-        console.error('Supabase deleteProject error:', e);
-      }
     }
   },
 
